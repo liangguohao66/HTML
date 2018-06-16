@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" >
+	<title>Url Testing</title>
+
+	<link rel="stylesheet" type="text/css" href="css/jquery-ui.css">
+	<link rel="stylesheet" type="text/css" href="../source/stable/layout-default.css">
+
+	<style type="text/css">
+	.ui-layout-west {
+		width:900px;
+	}
+	.ui-layout-north {
+		/* center themeswitcher buttons in north-pane */
+		text-align:	center;
+	}
+
+	.ui-layout-center {
+		/* remove default padding on center-pane so tabs widget fills it */
+		padding:	0;
+	}
+	.ui-layout-north div{
+		float:left;
+	}
+
+	</style>
+
+	<!--<script src="js/jquery-2.js"></script>-->
+	<script src="js/jquery.js"></script>
+	<script src="js/jquery-ui.js"></script>
+	<script src="../source/stable/jquery.layout.js"></script>
+
+    <script src="js/themeswitchertool.js"></script>
+	<script src="js/jsonFormater.js" type="text/javascript"></script>
+	<link href="css/jsonFormater.css" type="text/css" rel="stylesheet"/>
+	<link href="css/demo.css" type="text/css" rel="stylesheet"/>
+	<script type="text/javascript">
+	// create global var for layout so we can call myLayout.resize() after changing a theme
+	var myLayout,data={},postData={},link;
+    var tarketKey,tarketValue;
+
+	$(document).ready(function(){
+
+        getToken();
+        //json解析控件初始化
+        var format = function () {
+            var options = {
+                dom: '#Canvas',
+                isCollapsible: $('#CollapsibleView').prop('checked'),
+                quoteKeys: $('#QuoteKeys').prop('checked'),
+                tabSize: $('#TabSize').val()
+            };
+            window.jf = new JsonFormater(options);
+            jf.doFormat($('#RawJson').val());
+        };
+        $('#format').click(function () {
+            format();
+        });
+        $('#expandAll').click(function () {
+            window.jf.expandAll();
+        });
+        $('#collapseAll').click(function () {
+            window.jf.collapseAll();
+        });
+        $('#TabSize, #CollapsibleView, #QuoteKeys').change(function () {
+            format();
+        });
+        $('.expand').click(function () {
+            var level = $(this).data('level');
+            window.jf.collapseLevel(level);
+        });
+
+		// create a layout with default settings
+		myLayout = $('body').layout({
+			west__size:			.30
+		});
+		$("#request").click(function(){
+            $("#url").change();
+            $("#postdata").change();
+		});
+		$("#url").change(function(){			
+			var url,dataArray,paramStr,linkLen,scriptStr="<h4>host & get parameters</h4>";
+			data={};
+			tarketKey=$("#targetKey").val();
+			tarketValue=$("#targetValue").val();
+
+			url = this.value;
+			//去除链接前面多余信息
+			url = url.substring(url.indexOf("http://"));
+			//去除全部换行符
+			url = url.replace(/[\n]/ig,'');	
+			console.log("当前url为："+url);
+			//获取域名链接
+			linkLen = url.indexOf("?");
+			if(linkLen === -1){
+                $("#url").val(url);
+                link=url;
+                $("#postdata").change();
+			    return;
+			}
+			link = url.substring(0,linkLen);
+			console.log("链接为:"+link);
+			//参数字符串
+			paramStr = url.substring(linkLen+1);
+			dataArray = paramStr.split('&');
+			
+			//新建容器存储参数数据
+			//containerDom = document.createElement("div");
+		
+			//显示链接			
+			scriptStr += "<table>";
+			scriptStr += '<tr><td>domain:</td><td><input type="text"  style="width:300px" id="domain" value="'+link+'"></td></tr>';
+			//遍历参数
+			for(var i in dataArray){
+				//若该项为空，则跳过该参数
+				if(dataArray[i].length < 1) continue;
+				var nameLen = dataArray[i].indexOf("=");
+				var name = dataArray[i].substring(0,nameLen);
+				var value = dataArray[i].substring(nameLen+1);				
+				scriptStr += '<tr><td>'+name+':</td><td><input type="text" style="width:300px" id="'+name+'" value="'+value+'"></td></tr>';
+				data[name]=value;
+			}
+            if(tarketKey != null && tarketValue != null){
+                data[tarketKey]=tarketValue;
+            }
+			//scriptStr += '<tr><td colspan="2"><button id="request">请求url</button></td></tr>';
+			scriptStr += '</table>';
+			$("#getParameters").empty();
+			$("#getParameters").append(scriptStr);
+			$("#getParameters input").change(function(){
+				var id = this.id;
+				data[id] = this.value;
+				//var requestUrl = link + "?";
+		                //for(var i in data){
+			            //requestUrl = requestUrl + i + '=' + data[i] + '&';
+		                //}				
+				//$("#url").val(requestUrl);
+				//$("#url").change();
+				requestUrl();
+			});
+			requestUrl();
+		});
+		$("#postdata").change(function (){
+			var paramStr = this.value;
+			postDataToJson(paramStr);
+			requestPost();
+
+		});
+
+	});
+	function postSuccess(postResponseData){
+	    $("#RawJson").val(JSON.stringify(postResponseData));
+	}
+	function postDataToJson(paramStr){
+	    //根据post参数的形式解析
+        var dataArray=[],scriptStr="<h4>post parameters</h4>";
+        postData={};
+        if(paramStr && paramStr.split(':').length>0){
+            dataArray = paramStr.split('\n');
+            scriptStr += "<table>";
+            for(var i in dataArray){
+                //若该项为空，则跳过该参数
+                if(dataArray[i].length < 1) continue;
+                var nameLen = dataArray[i].indexOf(":");
+                var name = dataArray[i].substring(0,nameLen);
+                var value = dataArray[i].substring(nameLen+1);
+                scriptStr += '<tr><td>'+name+':</td><td><input type="text" style="width:300px" id="'+name+'" value="'+value+'"></td></tr>';
+                postData[name]=value;
+            }
+            scriptStr += '</table>';
+		}else if(paramStr && paramStr.split('=').length>0){
+            dataArray = paramStr.split('&');
+            scriptStr = "<table>";
+            for(var i in dataArray){
+                //若该项为空，则跳过该参数
+                if(dataArray[i].length < 1) continue;
+                var nameLen = dataArray[i].indexOf("=");
+                var name = dataArray[i].substring(0,nameLen);
+                var value = dataArray[i].substring(nameLen+1);
+                scriptStr += '<tr><td>'+name+':</td><td><input type="text" style="width:300px" id="'+name+'" value="'+value+'"></td></tr>';
+                postData[name]=value;
+            }
+            scriptStr += '</table>';
+		}
+        $("#postParameters").empty();
+        $("#postParameters").append(scriptStr);
+        if(tarketKey != null && tarketValue != null){
+            postData[tarketKey]=tarketValue;
+        }
+        $("#postParameters input").change(function(){
+            var id = this.id;
+            postData[id] = this.value;
+            //var requestUrl = link + "?";
+            //for(var i in data){
+            //requestUrl = requestUrl + i + '=' + data[i] + '&';
+            //}
+            //$("#url").val(requestUrl);
+            //$("#url").change();
+            requestPost();
+        });
+    }
+    function requestPost(){
+	    var postDataStr = "";
+        for(var i in postData){
+            postDataStr = postDataStr + i + ':' + postData[i] + '\n';
+        }
+        $("#postdata").val(postDataStr);
+        $.post(link,postData,formatResponse);
+	}
+	function requestUrl(){
+	    //根据输入的内容判断是get还是post请求
+		//url中带有？为get请求
+
+		//post参数不为空为post请求
+
+
+		var requestUrl = link + "?";
+		for(var i in data){
+			requestUrl = requestUrl + i + '=' + data[i] + '&';
+		}
+		$("#url").val(requestUrl);
+        $.get(link,data,formatResponse);
+
+
+		//document.getElementById("fm").src = requestUrl;
+	}
+	function formatResponse(data){
+        var dataStr = JSON.stringify(data);
+        $("#RawJson").val(dataStr);
+        var options = {
+            dom: '#Canvas',
+            isCollapsible: $('#CollapsibleView').prop('checked'),
+            quoteKeys: $('#QuoteKeys').prop('checked'),
+            tabSize: $('#TabSize').val()
+        };
+        window.jf = new JsonFormater(options);
+        jf.doFormat($('#RawJson').val());
+	}
+	function getToken(){
+	    var username=$("#username").val();
+	    var password=$("#password").val();
+	    var appkey=$("#appkey").val();
+	    var appSecret=$("#appSecret").val();
+	    var deviceId=$("#deviceId").val();
+	    var data={};
+	    var url="http://10.18.207.100/tool/signon_zy.php";
+	    if(username){
+	        data["username"]=username;
+		}
+		if(password){
+	        data["password"]=password;
+		}
+		if(appkey){
+	        data["appkey"]=appkey;
+		}
+		if(appSecret){
+	        data["appSecret"]=appSecret;
+		}
+		if(deviceId){
+	        data["deviceId"]=deviceId;
+		}
+		$.get(url,data,function(data){
+		    var pattern=/[0-9a-zA-Z_\-]{81}/;
+		    var token = pattern.exec(data);
+		    if(token){
+                console.log(token[0]);
+                $("#targetValue").val(token[0]);
+                return token[0];
+			}else{
+                return getToken();
+			}
+
+		})
+	}
+	</script>
+
+</head>
+<body>
+<div>
+		    <tr>
+				<p align="center" >-----*-----------*------------*----</p>
+				<h1 align="center" font=verdana style="font-family:verdana"> 接口测试助手 </h1>
+				<p align="center" >-----*-----------*------------*----</p>
+			</tr>
+</div>
+<div class="ui-layout-north">
+
+	<div id="token">
+		<table>
+		    <tr>
+				<h2>指定参数列表</h2>
+			</tr>
+			<tr>
+				<td style="text-align:left">用户名</td>
+				<td><input id="username" type="text" value="18561689350"/></td>
+			</tr>
+			<tr>
+				<td style="text-align:left">密	码</td>
+				<td><input id="password" type="text" value="111111"/></td>
+			</tr>
+			<tr>
+				<td style="text-align:left">appkey</td>
+				<td><input id="appkey" type="text" /></td>
+			</tr>
+			<tr>
+				<td style="text-align:left">appSecret</td>
+				<td><input id="appSecret" type="text" /></td>
+			</tr>
+			<tr>
+				<td style="text-align:left">deviceId</td>
+				<td><input id="deviceId" type="text" /></td>
+			</tr>
+			<tr>
+				<td style="text-align:left">替换目标</td>
+				<td><input type="text" id="targetKey" value="accessToken"/></td>
+			</tr>
+			<tr>
+				<td style="text-align:left">替换值</td>
+				<td><input type="text" id="targetValue" /></td>
+			</tr>
+		</table>
+
+	</div>
+	<div>
+	    <h2>请在下方输入请求url</h2>
+		<textarea id="url" cols=100 rows=6></textarea>
+	</div>
+	<div>
+		<span>如果是Post请求，请在下方输入Post参数（此处get请求不填）</span></br>
+		<textarea id="postdata" cols=100 rows=6></textarea>
+	</div>
+	<button style="width:100px;height:50px;background:gray;font-size:16" id="request">发送请求</button>
+
+</div>
+
+<div class="ui-layout-north">  
+	<div id="parameters">
+		<div id="getParameters">
+
+		</div>
+		<div id="postParameters">
+
+		</div>
+	</div>
+</div>
+
+<div class="ui-layout-south" style="text-align:left"> <a href="http://10.18.207.100/sys"  target="_blank">SIT Tools Home</a> </div>
+
+<div class="ui-layout-north">
+	<div id="result">
+		<div class="HeadersRow">
+			<h3 id="HeaderSubTitle" style="text-align=left">   JSON响应格式化显示:</h3>
+			<textarea style="width:970px; height:600px"  id="RawJson">{"number":1,"array":[],"null":null,"string":"leo108","boolean":true,"obj":{},"level1":{"level2":{"level3":{"level4":{"level5":{"level6":{"level7":{"level8":{}}}}}}}}}</textarea>
+		</div>
+		<div id="ControlsRow">
+			<input type="Button" value="格式化" id='format'/>
+			<span id="TabSizeHolder">
+    缩进量
+    <select id="TabSize">
+        <option value="1">1</option>
+        <option value="2" selected>2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+    </select>
+  </span>
+			<input type="checkbox" id="QuoteKeys" checked='checked' />
+			<label for="QuoteKeys">
+				引号
+			</label>&nbsp;
+			<input type="checkbox" id="CollapsibleView" checked='checked' />
+			<label for="CollapsibleView">
+				显示控制
+			</label>
+			<span id="CollapsibleViewDetail">
+    <a href="javascript:void(0);" id="expandAll">展开</a>
+    <a href="javascript:void(0);" id="collapseAll">叠起</a>
+    <a href="javascript:void(0);" class="expand" data-level="3">2级</a>
+    <a href="javascript:void(0);" class="expand" data-level="4">3级</a>
+    <a href="javascript:void(0);" class="expand" data-level="5">4级</a>
+    <a href="javascript:void(0);" class="expand" data-level="6">5级</a>
+    <a href="javascript:void(0);" class="expand" data-level="7">6级</a>
+    <a href="javascript:void(0);" class="expand" data-level="8">7级</a>
+    <a href="javascript:void(0);" class="expand" data-level="9">8级</a>
+  </span>
+		</div>
+		<div id="Canvas" class="Canvas"></div>
+	</div>
+
+</div>
+
+
+</body>
+</html>
